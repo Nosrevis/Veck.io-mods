@@ -20,6 +20,7 @@ javascript:(function(){
     let fovCanvas = null;
     let ctx = null;
     let currentSection = 'home';
+    let gameLoopId = null;
 
     // --- Menu UI ---
     const createMenu = () => {
@@ -216,6 +217,7 @@ javascript:(function(){
             </button>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <!-- Now Aimbot opens settings -->
                 <button onclick="window._vSwitch('aimbot')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">
                     ⚙️ Settings
                 </button>
