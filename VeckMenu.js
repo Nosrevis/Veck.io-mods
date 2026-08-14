@@ -16,313 +16,302 @@
     target: null
   };
 
-  const aimbotCore = {
-    getDistanceToEnemy(target) {
-      if (target.position) {
-        const dx = target.position.x - (window.game?.camera?.position?.x || 0);
-        const dy = target.position.y - (window.game?.camera?.position?.y || 0);
-        const dz = target.position.z - (window.game?.camera?.position?.z || 0);
-        return Math.sqrt(dx*dx + dy*dy + dz*dz);
-      }
-      if (target.x !== undefined && target.y !== undefined) {
-        const playerX = window.game?.localPlayer?.x || window.innerWidth / 2;
-        const playerY = window.game?.localPlayer?.y || window.innerHeight / 2;
-        const dx = target.x - playerX;
-        const dy = target.y - playerY;
-        return Math.sqrt(dx*dx + dy*dy);
-      }
-      const pos = this.getTargetPos(target);
-      if (!pos) return Infinity;
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      return Math.sqrt(Math.pow(pos.x - cx, 2) + Math.pow(pos.y - cy, 2));
-    },
-    
-    getTargetPos(target, headshot = false) {
-      // Try to get head position first for headshots
-      if (headshot && target.headPosition) {
-        if (target.headPosition.clone) {
-          const pos = target.headPosition.clone();
-          if (window.game?.camera) {
-            pos.project(window.game.camera);
-            return { x: (pos.x + 1) * window.innerWidth / 2, y: (-pos.y + 1) * window.innerHeight / 2 };
-          }
-          return { x: target.headPosition.x, y: target.headPosition.y };
-        }
-        return { x: target.headPosition.x, y: target.headPosition.y };
-      }
-      
-      // Try head bone for 3D games
-      if (headshot && target.bones) {
-        const head = target.bones.find(b => b.name === 'head' || b.name === 'HEAD');
-        if (head && window.game?.camera) {
-          const pos = head.position.clone ? head.position.clone() : { ...head.position };
-          pos.project(window.game.camera);
-          return { x: (pos.x + 1) * window.innerWidth / 2, y: (-pos.y + 1) * window.innerHeight / 2 };
-        }
-      }
-      
-      // Offset for headshot (aim higher)
-      if (target.getBoundingClientRect) {
-        const rect = target.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        if (headshot) {
-          // Aim at top 20% of hitbox (head area)
-          return { x: centerX, y: rect.top + rect.height * 0.2 };
-        }
-        return { x: centerX, y: centerY };
-      }
-      
-      if (target.position && window.game?.camera) {
-        const pos = target.position.clone ? target.position.clone() : target.position;
-        pos.project(window.game.camera);
-        const screenX = (pos.x + 1) * window.innerWidth / 2;
-        const screenY = (-pos.y + 1) * window.innerHeight / 2;
-        if (headshot) {
-          // Move up for headshot
-          return { x: screenX, y: screenY - 30 };
-        }
-        return { x: screenX, y: screenY };
-      }
-      
-      if (target.x !== undefined && target.y !== undefined) {
-        if (headshot) {
-          return { x: target.x, y: target.y - 20 };
-        }
-        return { x: target.x, y: target.y };
-      }
-      
+const aimbotCore = {
+  getCamera() {
+    return window.camera ||
+           window.game?.camera ||
+           window.game?.renderer?.camera ||
+           window.renderer?.camera ||
+           null;
+  },
+
+  getScene() {
+    if (window.scene?.traverse) return window.scene;
+    if (window.game?.scene?.traverse) return window.game.scene;
+    if (window.renderer?.scene?.traverse) return window.renderer.scene;
+    return null;
+  },
+
+  getTargetPos(target) {
+    const camera = this.getCamera();
+
+    if (target?.position && camera) {
+      try {
+        const p = target.position.clone
+          ? target.position.clone()
+          : {
+              x: target.position.x,
+              y: target.position.y,
+              z: target.position.z
+            };
+
+        if (Number.isFinite(p.y)) p.y += 0.6;
+
+        return this.worldToScreen(p, camera);
+      } catch {}
+    }
+
+    if (Number.isFinite(target?.x) &&
+        Number.isFinite(target?.y)) {
+      return {
+        x: target.x,
+        y: target.y
+      };
+    }
+
+    if (target?.getBoundingClientRect) {
+      const r = target.getBoundingClientRect();
+
+      return {
+        x: r.left + r.width / 2,
+        y: r.top + r.height * 0.25
+      };
+    }
+
+    return null;
+  },
+
+  worldToScreen(position, camera) {
+    if (!position || !camera) return null;
+
+    try {
+      if (typeof position.clone !== "function") return null;
+
+      const p = position.clone();
+      p.project(camera);
+
+      if (p.z < -1 || p.z > 1) return null;
+
+      return {
+        x: (p.x + 1) * window.innerWidth / 2,
+        y: (-p.y + 1) * window.innerHeight / 2
+      };
+    } catch {
       return null;
-    },
-    
-    isOnScreen(pos) {
-      if (state.lockThroughWalls) return true; // Skip visibility check
-      return pos && pos.x > -100 && pos.x < window.innerWidth + 100 && 
-             pos.y > -100 && pos.y < window.innerHeight + 100;
-    },
-    
-    isInFOV(target) {
-      if (state.aimbotFOV >= 360) return true;
+    }
+  },
+
+  getDistanceToEnemy(target) {
+    const camera = this.getCamera();
+
+    if (target?.position && camera?.position) {
+      const dx = target.position.x - camera.position.x;
+      const dy = target.position.y - camera.position.y;
+      const dz = target.position.z - camera.position.z;
+
+      return Math.hypot(dx, dy, dz);
+    }
+
+    const pos = this.getTargetPos(target);
+
+    if (!pos) return Infinity;
+
+    return Math.hypot(
+      pos.x - window.innerWidth / 2,
+      pos.y - window.innerHeight / 2
+    );
+  },
+
+  isInFOV(target) {
+    if (state.aimbotFOV >= 360) return true;
+
+    const pos = this.getTargetPos(target);
+
+    if (!pos) return false;
+
+    const dx = pos.x - window.innerWidth / 2;
+    const dy = pos.y - window.innerHeight / 2;
+
+    const radius =
+      Math.min(window.innerWidth, window.innerHeight) *
+      (state.aimbotFOV / 360);
+
+    return Math.hypot(dx, dy) <= radius;
+  },
+
+  findTargets() {
+    const targets = [];
+    const seen = new Set();
+
+    const local = window.game?.localPlayer;
+
+    const add = target => {
+      if (!target || seen.has(target)) return;
+
+      if (target === local) return;
+      if (target.isLocal) return;
+      if (target.userData?.isLocal) return;
+      if (target.active === false) return;
+
+      if (
+        Number.isFinite(target.health) &&
+        target.health <= 0
+      ) {
+        return;
+      }
+
+      if (
+        state.teamCheck &&
+        local &&
+        target.team !== undefined &&
+        local.team !== undefined &&
+        target.team === local.team
+      ) {
+        return;
+      }
+
+      seen.add(target);
+      targets.push(target);
+    };
+
+    const addCollection = collection => {
+      if (!collection) return;
+
+      const values = Array.isArray(collection)
+        ? collection
+        : Object.values(collection);
+
+      values.forEach(add);
+    };
+
+    addCollection(window.game?.players);
+    addCollection(window.game?.enemies);
+    addCollection(window.game?.entities);
+
+    const scene = this.getScene();
+
+    if (scene?.traverse) {
+      try {
+        scene.traverse(obj => {
+          const data = obj.userData || {};
+          const name = String(obj.name || "");
+
+          if (
+            data.isPlayer === true ||
+            data.isEnemy === true ||
+            data.enemy === true ||
+            /player|enemy|opponent|character|avatar/i.test(name)
+          ) {
+            add(obj);
+          }
+        });
+      } catch {}
+    }
+
+    return targets;
+  },
+
+  findClosestEnemy() {
+    let closest = null;
+    let closestDistance = Infinity;
+
+    for (const target of this.findTargets()) {
       const pos = this.getTargetPos(target);
-      if (!pos) return false;
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      const angle = Math.atan2(pos.y - cy, pos.x - cx) * 180 / Math.PI;
-      const normalizedAngle = ((angle % 360) + 360) % 360;
-      const angleDiff = Math.abs(normalizedAngle - 0);
-      return angleDiff <= state.aimbotFOV / 2;
-    },
-    
-    findClosestEnemy() {
-      const targets = this.findTargets();
-      if (targets.length === 0) return null;
-      let closest = null;
-      let closestDist = Infinity;
-      
-      for (const target of targets) {
-        // Skip visibility check if lock through walls is on
-        if (!state.lockThroughWalls) {
-          const pos = this.getTargetPos(target);
-          if (!this.isOnScreen(pos)) continue;
-        }
-        
-        if (!this.isInFOV(target)) continue;
-        
-        const dist = this.getDistanceToEnemy(target);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closest = { element: target, dist };
-        }
-      }
-      
-      // Get fresh position for the closest target (with headshot)
-      if (closest) {
-        closest.pos = this.getTargetPos(closest.element, true); // true = headshot
-      }
-      
-      return closest;
-    },
-    
-    findTargets() {
-      const targets = [];
-      
-      // Scan larger area if lock through walls is on
-      const scanAll = state.lockThroughWalls;
-      
-      if (window.game) {
-        if (window.game.players) {
-          Object.values(window.game.players).forEach(p => {
-            if (p && !p.isLocal && (p.active !== false || scanAll) && (p.health > 0 || scanAll)) {
-              if (!state.teamCheck || p.team !== window.game.localPlayer?.team) {
-                targets.push(p);
-              }
-            }
-          });
-        }
-        if (window.game.enemies) {
-          Object.values(window.game.enemies).forEach(e => {
-            if (e && (e.active !== false || scanAll)) targets.push(e);
-          });
-        }
-        if (window.game.entities) {
-          Object.values(window.game.entities).forEach(e => {
-            if (e && e.type === 'enemy' && (e.active !== false || scanAll)) targets.push(e);
-          });
-        }
-      }
-      
-      if (targets.length === 0) {
-        const selectors = ['.player:not(.local)', '.enemy', '[class*="enemy"]', 
-          '[class*="opponent"]', '[class*="target"]', '[data-team]:not([data-team="own"])'];
-        
-        for (const selector of selectors) {
-          const elements = document.querySelectorAll(selector);
-          elements.forEach(el => {
-            const rect = el.getBoundingClientRect();
-            // More lenient size check if locking through walls
-            const minSize = scanAll ? 1 : 5;
-            if (rect.width > minSize && rect.height > minSize) {
-              if (scanAll) {
-                targets.push(el);
-              } else {
-                const style = window.getComputedStyle(el);
-                if (style.display !== 'none' && style.visibility !== 'hidden') {
-                  targets.push(el);
-                }
-              }
-            }
-          });
-        }
-      }
-      
-      return targets;
-    },
-    
-    lockOnto(targetData) {
-      if (!targetData || !targetData.pos) return;
-      
-      const { pos } = targetData;
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      
-      const dx = pos.x - cx;
-      const dy = pos.y - cy;
-      
-      // INSANE MODE: 100% = INSTANT SNAP, no smoothing
-      const strength = state.aimbotStrength;
-      
-      let moveX, moveY;
-      
-      if (strength >= 100) {
-        // INSTANT SNAP - teleport crosshair to head
-        moveX = dx;
-        moveY = dy;
-      } else if (strength >= 80) {
-        // FAST - almost instant
-        const speed = 0.5 + (strength / 200);
-        moveX = dx * speed;
-        moveY = dy * speed;
-      } else {
-        // NORMAL - smoothed
-        const speed = 0.05 + (strength / 200);
-        moveX = dx * speed;
-        moveY = dy * speed;
-      }
-      
-      // Update visual indicator
-      const indicator = document.getElementById('aimbot-target');
-      if (indicator) {
-        indicator.style.display = 'block';
-        indicator.style.left = (pos.x - 8) + 'px';
-        indicator.style.top = (pos.y - 8) + 'px';
-        // Change color based on strength
-        if (strength >= 100) {
-          indicator.style.borderColor = '#ff0000';
-          indicator.style.boxShadow = '0 0 30px #ff0000, 0 0 60px #ff0000';
-        } else if (strength >= 80) {
-          indicator.style.borderColor = '#ff8800';
-          indicator.style.boxShadow = '0 0 20px #ff8800, 0 0 40px #ff8800';
-        } else {
-          indicator.style.borderColor = '#ffd700';
-          indicator.style.boxShadow = '0 0 20px #ffd700, 0 0 40px #ffd700';
-        }
-      }
-      
-      // Apply aim
-      if (document.pointerLockElement) {
-        const canvas = document.pointerLockElement;
-        const event = new MouseEvent('mousemove', { 
-          movementX: moveX, 
-          movementY: moveY, 
-          bubbles: true 
-        });
-        canvas.dispatchEvent(event);
-        
-        if (window.game?.controls) {
-          const sens = strength >= 100 ? 0.001 : 0.002;
-          window.game.controls.yaw -= moveX * sens;
-          window.game.controls.pitch -= moveY * sens;
-        }
-        return;
-      }
-      
-      if (window.game?.camera) {
-        const sensitivity = strength >= 100 ? 0.001 : 0.002;
-        window.game.camera.rotation.y -= moveX * sensitivity;
-        window.game.camera.rotation.x -= moveY * sensitivity;
-        return;
-      }
-      
-      const canvas = document.querySelector('canvas');
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const event = new MouseEvent('mousemove', {
-          clientX: rect.left + cx + moveX,
-          clientY: rect.top + cy + moveY,
-          movementX: moveX,
-          movementY: moveY,
-          bubbles: true
-        });
-        canvas.dispatchEvent(event);
-      }
-    },
-    
-    update() {
-      if (!state.aimbot) {
-        const indicator = document.getElementById('aimbot-target');
-        if (indicator) {
-          indicator.style.display = 'none';
-          indicator.style.borderColor = '#ffd700';
-          indicator.style.boxShadow = '0 0 20px #ffd700, 0 0 40px #ffd700';
-        }
-        return;
-      }
-      
-      const target = this.findClosestEnemy();
-      
-      if (target) {
-        state.target = target;
-        this.lockOnto(target);
-      } else {
-        state.target = null;
-        const indicator = document.getElementById('aimbot-target');
-        if (indicator) indicator.style.display = 'none';
+
+      if (!pos) continue;
+      if (!this.isInFOV(target)) continue;
+
+      const distance = this.getDistanceToEnemy(target);
+
+      if (distance < closestDistance) {
+        closestDistance = distance;
+
+        closest = {
+          element: target,
+          dist: distance,
+          pos
+        };
       }
     }
-  };
 
-  const hookGameLoop = () => {
-    if (window.__aimbotHooked) return;
-    window.__aimbotHooked = true;
-    const originalRAF = window.requestAnimationFrame;
-    window.requestAnimationFrame = function(callback) {
-      aimbotCore.update();
-      return originalRAF.call(this, callback);
-    };
-    setInterval(() => aimbotCore.update(), 1000 / 60);
-  };
+    return closest;
+  },
 
+  aimAt(targetData) {
+    const target = targetData?.element;
+    const camera = this.getCamera();
+
+    if (!target) return false;
+
+    if (camera &&
+        target.position &&
+        typeof camera.lookAt === "function") {
+      try {
+        const targetPos = target.position.clone
+          ? target.position.clone()
+          : {
+              x: target.position.x,
+              y: target.position.y,
+              z: target.position.z
+            };
+
+        if (Number.isFinite(targetPos.y)) {
+          targetPos.y += 0.6;
+        }
+
+        camera.lookAt(targetPos);
+        return true;
+      } catch {}
+    }
+
+    if (targetData.pos) {
+      const canvas =
+        document.pointerLockElement ||
+        document.querySelector("canvas");
+
+      if (!canvas) return false;
+
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+
+      const strength =
+        Math.max(1, Math.min(100, state.aimbotStrength)) / 100;
+
+      try {
+        canvas.dispatchEvent(
+          new MouseEvent("mousemove", {
+            movementX: (targetData.pos.x - cx) * strength,
+            movementY: (targetData.pos.y - cy) * strength,
+            bubbles: true
+          })
+        );
+
+        return true;
+      } catch {}
+    }
+
+    return false;
+  },
+
+  update() {
+    if (!state.aimbot) {
+      state.target = null;
+      return;
+    }
+
+    const target = this.findClosestEnemy();
+
+    if (!target) {
+      state.target = null;
+      return;
+    }
+
+    state.target = target;
+    this.aimAt(target);
+  }
+};
+
+const hookGameLoop = () => {
+  if (window.__aimbotHooked) return;
+
+  window.__aimbotHooked = true;
+
+  setInterval(() => {
+    aimbotCore.update();
+  }, 1000 / 60);
+};
+
+hookGameLoop();
   const style = document.createElement("style");
   style.textContent = `
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
