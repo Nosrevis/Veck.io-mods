@@ -15,13 +15,12 @@ javascript:(function(){
     let menuDiv = null;
     let modsBtn = null;
     let isMenuOpen = false;
-    let settingsDiv = null; // The new external settings panel
+    let settingsDiv = null; 
     let contentDiv = null;
     let fovCanvas = null;
     let ctx = null;
     let currentSection = 'home';
-    let gameLoopId = null;
-
+    
     // --- Menu UI ---
     const createMenu = () => {
         if (menuDiv) return;
@@ -211,7 +210,7 @@ javascript:(function(){
                 <h3 style="margin: 0;">Advantages</h3>
             </div>
             
-            <!-- Main Aimbot Button (No more toggle switch) -->
+            <!-- Main Aimbot Button (Now in the exact spot Settings was) -->
             <button id="aimbotMainBtn" onclick="window._toggleAimbotBtn()" style="padding: 20px; background: #3a3a3c; color: white; border: 2px solid #555; border-radius: 12px; font-size: 18px; font-weight: 600; margin-bottom: 15px;">
                 🎯 Aimbot
             </button>
@@ -379,36 +378,54 @@ javascript:(function(){
     // --- Aimbot Logic ---
     const aimbotCore = {
         update: () => {
-            if (!window.game || !window.game.camera) return;
-            
-            // If disabled, just return
+            // Use DOM scanning for Veck.io
+            const camEl = document.querySelector('[class*="camera"]') || document.querySelector('[class*="Camera"]');
+            if (!camEl) return;
+
             if (!config.aimbot.enabled) {
                 target = null;
                 return;
             }
 
-            const players = window.game.entities.players;
-            if (!players) return;
+            const players = Array.from(document.querySelectorAll('[class*="player"]'));
+            if (!players.length) return;
+
+            // Get camera transform
+            const camTransform = camEl.getAttribute('transform');
+            const camMatch = camTransform.match(/-?\d+/g);
+            if (!camMatch) return;
+            
+            const camX = parseFloat(camMatch[0]);
+            const camY = parseFloat(camMatch[1]);
+            const camZ = parseFloat(camMatch[2]);
 
             let closestDist = Infinity;
             let closestPlayer = null;
-            const camPos = window.game.camera.position;
-            const camRot = window.game.camera.rotation;
 
             players.forEach(p => {
-                if (!p || !p.visible) return;
+                if (!p.style.display || p.style.display === 'none') return;
                 
-                const dx = p.position.x - camPos.x;
-                const dz = p.position.z - camPos.z;
-                const dist = Math.sqrt(dx*dx + dz*dz);
+                const pTransform = p.getAttribute('transform');
+                const pMatch = pTransform.match(/-?\d+/g);
+                if (!pMatch) return;
+
+                const pX = parseFloat(pMatch[0]);
+                const pY = parseFloat(pMatch[1]);
+                const pZ = parseFloat(pMatch[2]);
+
+                const dx = pX - camX;
+                const dy = pY - camY;
+                const dz = pZ - camZ;
+                const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
 
                 if (dist > config.aimbot.maxDistance) return;
 
+                // Angle check
                 const angle = Math.atan2(dx, dz);
-                let angleDiff = Math.abs(angle - camRot.x);
+                const camRot = camMatch[3] ? parseFloat(camMatch[3]) : 0;
+                let angleDiff = Math.abs(angle - camRot);
                 if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
 
-                // Simple distance check for closest target in FOV
                 if (angleDiff < (config.aimbot.fov / 2) * (Math.PI / 180)) {
                     if (dist < closestDist) {
                         closestDist = dist;
@@ -420,17 +437,21 @@ javascript:(function(){
             target = closestPlayer;
 
             if (target) {
-                const targetAngle = Math.atan2(target.position.x - camPos.x, target.position.z - camPos.z);
-                let diff = targetAngle - camRot.x;
+                const tTransform = target.getAttribute('transform');
+                const tMatch = tTransform.match(/-?\d+/g);
+                const tX = parseFloat(tMatch[0]);
+                const tY = parseFloat(tMatch[1]);
+                const tZ = parseFloat(tMatch[2]);
+
+                const targetAngle = Math.atan2(tX - camX, tZ - camZ);
+                const camRotX = parseFloat(camMatch[3]) || 0;
+                let diff = targetAngle - camRotX;
                 while (diff <= -Math.PI) diff += Math.PI * 2;
                 while (diff > Math.PI) diff -= Math.PI * 2;
                 
-                // Apply smoothing
-                camRot.x += diff / config.aimbot.smooth;
-
-                const targetY = target.position.y + 1.5;
-                const pitch = Math.atan2(targetY - camPos.y, closestDist);
-                window.game.camera.rotation.y += (pitch - window.game.camera.rotation.y) / config.aimbot.smooth;
+                camEl.setAttribute('transform', 
+                    `${camX} ${camY} ${camZ} ${camRotX + diff / config.aimbot.smooth} 0 0`
+                );
             }
         }
     };
@@ -463,7 +484,7 @@ javascript:(function(){
                 canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
 
-                const screenPos = projectToScreen(target.position);
+                const screenPos = projectToScreen(target);
                 if (screenPos) {
                     ctx.beginPath();
                     ctx.arc(screenPos.x, screenPos.y, 20, 0, Math.PI * 2);
@@ -488,56 +509,52 @@ javascript:(function(){
     };
 
     // --- Helper ---
-    const projectToScreen = (pos) => {
-        if (!window.game || !window.game.camera) return null;
-        const camPos = window.game.camera.position;
-        const camRot = window.game.camera.rotation;
-        const dx = pos.x - camPos.x;
-        const dz = pos.z - camPos.z;
-        const dy = pos.y - camPos.y;
-        const cosX = Math.cos(camRot.x);
-        const sinX = Math.sin(camRot.x);
-        const cosY = Math.cos(camRot.y);
-        const sinY = Math.sin(camRot.y);
+    const projectToScreen = (el) => {
+        const camEl = document.querySelector('[class*="camera"]');
+        if (!camEl) return null;
+        
+        const transform = camEl.getAttribute('transform');
+        const match = transform.match(/-?\d+/g);
+        if (!match) return null;
+        
+        const camX = parseFloat(match[0]);
+        const camY = parseFloat(match[1]);
+        const camZ = parseFloat(match[2]);
+        const camRot = parseFloat(match[3]) || 0;
+
+        const pTransform = el.getAttribute('transform');
+        const pMatch = pTransform.match(/-?\d+/g);
+        if (!pMatch) return null;
+
+        const pX = parseFloat(pMatch[0]);
+        const pY = parseFloat(pMatch[1]);
+        const pZ = parseFloat(pMatch[2]);
+
+        const dx = pX - camX;
+        const dz = pZ - camZ;
+        const dy = pY - camY;
+        
+        const cosX = Math.cos(camRot);
+        const sinX = Math.sin(camRot);
+        
         const rx = dx * cosX - dz * sinX;
         const rz = dx * sinX + dz * cosX;
-        const ry = dy * cosY - rz * sinY;
-        const rzFinal = dy * sinY + rz * cosY;
+        
         const fov = 60; 
         const fovRad = fov * (Math.PI / 180);
-        if (rzFinal <= 0) return null; 
-        const screenX = window.innerWidth / 2 + (rx / rzFinal) * (window.innerWidth / (2 * Math.tan(fovRad / 2)));
-        const screenY = window.innerHeight / 2 - (ry / rzFinal) * (window.innerHeight / (2 * Math.tan(fovRad / 2)));
+        
+        if (rz <= 0) return null; 
+        
+        const screenX = window.innerWidth / 2 + (rx / rz) * (window.innerWidth / (2 * Math.tan(fovRad / 2)));
+        const screenY = window.innerHeight / 2 - (dy / rz) * (window.innerHeight / (2 * Math.tan(fovRad / 2)));
+        
         return { x: screenX, y: screenY };
     };
 
     // --- Initialization ---
     const init = () => {
         createMenu();
-        
-        // Wait for game
-        if (window.game) {
-            hookGameLoop();
-            hookRender();
-        } else {
-            const checkGame = setInterval(() => {
-                if (window.game) {
-                    clearInterval(checkGame);
-                    hookGameLoop();
-                    hookRender();
-                }
-            }, 100);
-        }
-    };
-
-    const hookGameLoop = () => {
-        if (window.__aimbotHooked) return;
-        window.__aimbotHooked = true;
-        const originalRAF = window.requestAnimationFrame;
-        window.requestAnimationFrame = function(callback) {
-            aimbotCore.update();
-            return originalRAF.call(this, callback);
-        };
+        hookRender();
     };
 
     init();
