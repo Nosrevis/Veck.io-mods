@@ -130,76 +130,97 @@ const aimbotCore = {
   },
 
   findTargets() {
-    const targets = [];
-    const seen = new Set();
+  const targets = [];
+  const seen = new Set();
 
-    const local = window.game?.localPlayer;
+  const add = target => {
+    if (!target || seen.has(target)) return;
 
-    const add = target => {
-      if (!target || seen.has(target)) return;
+    if (target === window[MY_PLAYER_TAG]) return;
+    if (target.isLocal) return;
+    if (target.userData?.isLocal) return;
+    if (target.active === false) return;
 
-      if (target === local) return;
-      if (target.isLocal) return;
-      if (target.userData?.isLocal) return;
-      if (target.active === false) return;
+    if (
+      Number.isFinite(target.health) &&
+      target.health <= 0
+    ) {
+      return;
+    }
 
-      if (
-        Number.isFinite(target.health) &&
-        target.health <= 0
-      ) {
-        return;
-      }
-
-      if (
-        state.teamCheck &&
-        local &&
-        target.team !== undefined &&
-        local.team !== undefined &&
-        target.team === local.team
-      ) {
-        return;
-      }
-
-      seen.add(target);
-      targets.push(target);
-    };
-
-    const addCollection = collection => {
-      if (!collection) return;
-
-      const values = Array.isArray(collection)
-        ? collection
-        : Object.values(collection);
-
-      values.forEach(add);
-    };
-
-    addCollection(window.game?.players);
-    addCollection(window.game?.enemies);
-    addCollection(window.game?.entities);
-
-    const scene = this.getScene();
-
-    if (scene?.traverse) {
+    if (
+      state.teamCheck &&
+      window[GetMyPlayerTeam] &&
+      window[AmIYourEnemy]
+    ) {
       try {
-        scene.traverse(obj => {
-          const data = obj.userData || {};
-          const name = String(obj.name || "");
+        const myTeam = window[GetMyPlayerTeam]();
+        const isEnemy = window[AmIYourEnemy](target);
 
-          if (
-            data.isPlayer === true ||
-            data.isEnemy === true ||
-            data.enemy === true ||
-            /player|enemy|opponent|character|avatar/i.test(name)
-          ) {
-            add(obj);
-          }
-        });
+        if (!isEnemy || target.team === myTeam) {
+          return;
+        }
       } catch {}
     }
 
-    return targets;
-  },
+    seen.add(target);
+    targets.push(target);
+  };
+
+  const addCollection = collection => {
+    if (!collection) return;
+
+    const values = Array.isArray(collection)
+      ? collection
+      : Object.values(collection);
+
+    values.forEach(add);
+  };
+
+  // Accurate player-related internal names
+  addCollection(window[OTHER_PLAYER_TAG]);
+  addCollection(window[MY_PLAYER_TAG]);
+  addCollection(window[UpdateRemotePlayer]);
+  addCollection(window[UpdateLocalPlayer]);
+  addCollection(window[get_playerState]);
+  addCollection(window[get_ActorNumber]);
+  addCollection(window[TryAddPlayer]);
+  addCollection(window[TryRemovePlayer]);
+  addCollection(window[BuildLineupPlayers]);
+  addCollection(window[PopulateDisplayPlayers]);
+  addCollection(window[AcquireDisplayPlayerInstance]);
+  addCollection(window[AttachGunToDisplayPlayer]);
+  addCollection(window[displayOnlyPlayerPrefab]);
+  addCollection(window[sortedPlayers]);
+  addCollection(window[ShowCurrentGunOnGlobalPlayer]);
+  addCollection(window[CleanupGunsOnGlobalPlayer]);
+  addCollection(window[FFAPlayerSlot]);
+  addCollection(window[WaitingForPlayers]);
+  addCollection(window[maxPlayers]);
+  addCollection(window[currentPlayers]);
+
+  const scene = this.getScene();
+
+  if (scene?.traverse) {
+    try {
+      scene.traverse(obj => {
+        const data = obj.userData || {};
+        const name = String(obj.name || "");
+
+        if (
+          data.isPlayer === true ||
+          data.isEnemy === true ||
+          data.enemy === true ||
+          /player|enemy|opponent|character|avatar/i.test(name)
+        ) {
+          add(obj);
+        }
+      });
+    } catch {}
+  }
+
+  return targets;
+},
 
   findClosestEnemy() {
     let closest = null;
