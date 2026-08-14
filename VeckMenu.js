@@ -1,44 +1,39 @@
 javascript:(function(){
-    // --- Configuration ---
+    // --- 1. Configuration ---
     const config = {
         aimbot: {
             enabled: true,
-            fov: 180, // Default visual FOV
-            smooth: 10, // Intensity (Higher = Slower/Smoother, Lower = Fast/Snappy)
+            fov: 180,
+            smooth: 10, 
             maxDistance: 1000,
-            silent: true, // Default to silent so walls don't matter visually
+            silent: true, 
             autoFire: false,
-            autoFireDelay: 150,
-            lockThroughWalls: false, // Key feature
-            showFov: false // Key feature
+            lockThroughWalls: false, 
+            showFov: false 
         },
         visuals: {
             showHealth: false,
             showName: true,
             showDistance: false
+        },
+        fun: {
+            speed: false,
+            fly: false
         }
     };
 
-    // --- State ---
+    // --- 2. State & Globals ---
     let target = null;
     let isFiring = false;
     let fireTimer = 0;
-    
-    // --- UI State ---
-    let currentSection = 'home'; // home, fun, visual
     let menuDiv = null;
     let modsBtn = null;
     let isMenuOpen = false;
-    let contentDiv = null; // The scrollable part of the menu
+    let contentDiv = null; 
+    let fovCanvas = null;
+    let ctx = null;
 
-    // --- Initialization ---
-    const init = () => {
-        createMenu();
-        hookGameLoop();
-        hookRender();
-    };
-
-    // --- Menu UI Builder ---
+    // --- 3. Menu UI ---
     const createMenu = () => {
         if (menuDiv) return;
 
@@ -60,6 +55,7 @@ javascript:(function(){
             font-weight: bold;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
             touch-action: manipulation;
+            font-family: sans-serif;
         `;
         modsBtn.onclick = () => {
             isMenuOpen = !isMenuOpen;
@@ -97,11 +93,12 @@ javascript:(function(){
             text-align: center;
             font-weight: bold;
             border-bottom: 1px solid #444;
+            user-select: none;
         `;
         header.innerText = "Veck Menu";
         menuDiv.appendChild(header);
 
-        // Content Area (Scrollable)
+        // Content Area
         contentDiv = document.createElement('div');
         contentDiv.style.cssText = `
             flex: 1;
@@ -111,7 +108,7 @@ javascript:(function(){
         `;
         menuDiv.appendChild(contentDiv);
 
-        // Footer (Close Button)
+        // Footer
         const footer = document.createElement('div');
         footer.style.cssText = `
             padding: 10px;
@@ -138,56 +135,64 @@ javascript:(function(){
         menuDiv.appendChild(footer);
 
         document.body.appendChild(menuDiv);
-        makeDraggable(menuDiv);
+        makeDraggable(menuDiv, header);
         renderHome();
     };
 
-    // --- View Rendering ---
+    // --- 4. View Rendering ---
     const renderHome = () => {
         currentSection = 'home';
         contentDiv.innerHTML = `
             <div style="display: flex; flex-direction: column; gap: 15px;">
-                <button onclick="window._vekswitch='fun'; window._veksrender()" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 600; text-align: left;">
-                    ⚡ Fun Advantages
+                <button onclick="window._vSwitch('fun')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 600;">
+                    🎉 Fun
                 </button>
-                <button onclick="window._vekswitch='visual'; window._veksrender()" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 600; text-align: left;">
-                    👁️ Visuals
+                <button onclick="window._vSwitch('advantages')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 600;">
+                    ⚡ Advantages
+                </button>
+                <button onclick="window._vSwitch('visual')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 600;">
+                    👁️ Visual
                 </button>
             </div>
         `;
     };
 
-    window._vekswitch = 'fun';
-    window._veksrender = renderFun;
-
+    let currentSection = 'home';
+    
     const renderFun = () => {
         currentSection = 'fun';
         contentDiv.innerHTML = `
             <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                <button onclick="window._veksrender()" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
-                <h3 style="margin: 0;">Fun Advantages</h3>
+                <button onclick="window._vSwitch('home')" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
+                <h3 style="margin: 0;">Fun</h3>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <!-- Aimbot -->
-                <button onclick="window._veksopenAimbot()" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">
+                <button onclick="alert('Speed mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🏃 Speed</button>
+                <button onclick="alert('Fly mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🦅 Fly</button>
+                <button onclick="alert('Jump mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🦘 Jump</button>
+                <button onclick="alert('Skin mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🎨 Skin</button>
+                <button onclick="alert('Emote mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">😂 Emote</button>
+                <button onclick="alert('Pet mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🐶 Pet</button>
+            </div>
+        `;
+    };
+
+    const renderAdvantages = () => {
+        currentSection = 'advantages';
+        contentDiv.innerHTML = `
+            <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                <button onclick="window._vSwitch('home')" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
+                <h3 style="margin: 0;">Advantages</h3>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button onclick="window._vSwitch('aimbot')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">
                     🎯 Aimbot
                 </button>
-                <!-- Placeholders for other mods -->
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #2c2c2e; color: #888; border: 1px dashed #555; border-radius: 12px; font-size: 16px;">
-                    🏃 Speed
-                </button>
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #2c2c2e; color: #888; border: 1px dashed #555; border-radius: 12px; font-size: 16px;">
-                    🦅 Fly
-                </button>
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #2c2c2e; color: #888; border: 1px dashed #555; border-radius: 12px; font-size: 16px;">
-                    🛡️ Regen
-                </button>
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #2c2c2e; color: #888; border: 1px dashed #555; border-radius: 12px; font-size: 16px;">
-                    💣 Explosive
-                </button>
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #2c2c2e; color: #888; border: 1px dashed #555; border-radius: 12px; font-size: 16px;">
-                    🚀 Rocket
-                </button>
+                <button onclick="alert('Regen mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🛡️ Regen</button>
+                <button onclick="alert('Speed mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">⚡ Speed</button>
+                <button onclick="alert('Fly mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🚀 Fly</button>
+                <button onclick="alert('Explosive mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">💥 Explosive</button>
+                <button onclick="alert('Rocket mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🔥 Rocket</button>
             </div>
         `;
     };
@@ -196,25 +201,25 @@ javascript:(function(){
         currentSection = 'visual';
         contentDiv.innerHTML = `
             <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                <button onclick="window._veksrender()" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
-                <h3 style="margin: 0;">Visuals</h3>
+                <button onclick="window._vSwitch('home')" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
+                <h3 style="margin: 0;">Visual</h3>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">📦 ESP Box</button>
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">📏 Lines</button>
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #2c2c2e; color: #888; border: 1px dashed #555; border-radius: 12px; font-size: 16px;">Health Bar</button>
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #2c2c2e; color: #888; border: 1px dashed #555; border-radius: 12px; font-size: 16px;">Name Tags</button>
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #2c2c2e; color: #888; border: 1px dashed #555; border-radius: 12px; font-size: 16px;">Chams</button>
-                <button onclick="alert('Coming Soon')" style="padding: 20px; background: #2c2c2e; color: #888; border: 1px dashed #555; border-radius: 12px; font-size: 16px;">No Fog</button>
+                <button onclick="alert('ESP Box mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">📦 ESP Box</button>
+                <button onclick="alert('Lines mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">📏 Lines</button>
+                <button onclick="alert('Health Bar mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">❤️ Health</button>
+                <button onclick="alert('Name Tags mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🏷️ Names</button>
+                <button onclick="alert('Chams mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🎨 Chams</button>
+                <button onclick="alert('No Fog mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🌫️ No Fog</button>
             </div>
         `;
     };
 
-    window._veksopenAimbot = () => {
+    const renderAimbot = () => {
         currentSection = 'aimbot';
         contentDiv.innerHTML = `
             <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                <button onclick="window._veksrender()" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
+                <button onclick="window._vSwitch('advantages')" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
                 <h3 style="margin: 0;">Aimbot</h3>
             </div>
             
@@ -224,7 +229,7 @@ javascript:(function(){
                     <span id="smoothVal">${config.aimbot.smooth}</span>
                 </label>
                 <input type="range" id="smoothRange" min="1" max="20" value="${config.aimbot.smooth}" style="width: 100%;">
-                <small style="color: #888;">Higher = Smoother, Lower = Snappy</small>
+                <small style="color: #888;">Higher = Smoother</small>
             </div>
 
             <div style="margin-bottom: 15px;">
@@ -250,7 +255,6 @@ javascript:(function(){
             </div>
         `;
 
-        // Bind Inputs
         const smoothRange = contentDiv.querySelector('#smoothRange');
         const fovRange = contentDiv.querySelector('#fovRange');
         const lockWalls = contentDiv.querySelector('#lockWalls');
@@ -266,22 +270,28 @@ javascript:(function(){
         };
         lockWalls.onchange = (e) => {
             config.aimbot.lockThroughWalls = e.target.checked;
-            config.aimbot.silent = e.target.checked; // Silent aim usually goes with wall lock
         };
         showFov.onchange = (e) => {
             config.aimbot.showFov = e.target.checked;
         };
     };
 
-    // --- Drag Logic ---
-    const makeDraggable = (el) => {
+    // Global switcher
+    window._vSwitch = (section) => {
+        if (section === 'fun') renderFun();
+        else if (section === 'advantages') renderAdvantages();
+        else if (section === 'visual') renderVisuals();
+        else if (section === 'aimbot') renderAimbot();
+        else if (section === 'home') renderHome();
+    };
+
+    // --- 5. Drag Logic ---
+    const makeDraggable = (el, handle) => {
         let isDragging = false;
         let startX, startY, initialLeft, initialTop;
 
         const onStart = (e) => {
-            // Only drag if touching the header or empty space, not inputs
-            if(e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA') return;
-            
+            if(e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
             isDragging = true;
             const touch = e.touches ? e.touches[0] : e;
             startX = touch.clientX;
@@ -289,6 +299,7 @@ javascript:(function(){
             initialLeft = el.offsetLeft;
             initialTop = el.offsetTop;
             el.style.transition = 'none';
+            el.style.transform = 'none';
         };
 
         const onMove = (e) => {
@@ -298,7 +309,6 @@ javascript:(function(){
             const dy = touch.clientY - startY;
             el.style.left = `${initialLeft + dx}px`;
             el.style.top = `${initialTop + dy}px`;
-            el.style.transform = 'none';
         };
 
         const onEnd = () => {
@@ -306,11 +316,10 @@ javascript:(function(){
             el.style.transition = 'all 0.1s ease';
         };
 
-        // Header click to drag
-        const header = menuDiv.querySelector('div[style*="padding: 15px"]');
-        if(header) {
-            header.addEventListener('mousedown', onStart);
-            header.addEventListener('touchstart', onStart, { passive: false });
+        const h = handle || menuDiv.querySelector('div[style*="padding: 15px"]');
+        if(h) {
+            h.addEventListener('mousedown', onStart);
+            h.addEventListener('touchstart', onStart, { passive: false });
         }
 
         window.addEventListener('mousemove', onMove);
@@ -319,7 +328,7 @@ javascript:(function(){
         window.addEventListener('touchend', onEnd);
     };
 
-    // --- Aimbot Logic ---
+    // --- 6. Aimbot Logic ---
     const aimbotCore = {
         update: () => {
             if (!window.game || !window.game.camera) return;
@@ -346,21 +355,15 @@ javascript:(function(){
                 if (dist > config.aimbot.maxDistance) return;
 
                 const angle = Math.atan2(dx, dz);
-                
-                // FOV Check
                 let angleDiff = Math.abs(angle - camRot.x);
                 if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
 
-                // If "Lock Through Walls" is ON, we ignore FOV for targeting
-                // But we still need to know if they are "in front" generally to avoid 360 snaps if desired
-                // Here, we strictly follow: if LockThroughWalls is true, target ANY player in range
                 if (config.aimbot.lockThroughWalls) {
                      if (dist < closestDist) {
                         closestDist = dist;
                         closestPlayer = p;
                     }
                 } else {
-                    // Standard FOV targeting
                     if (angleDiff < (config.aimbot.fov / 2) * (Math.PI / 180)) {
                         if (dist < closestDist) {
                             closestDist = dist;
@@ -373,21 +376,16 @@ javascript:(function(){
             target = closestPlayer;
 
             if (target) {
-                // Smooth Rotation
                 const targetAngle = Math.atan2(target.position.x - camPos.x, target.position.z - camPos.z);
-                
                 let diff = targetAngle - camRot.x;
                 while (diff <= -Math.PI) diff += Math.PI * 2;
                 while (diff > Math.PI) diff -= Math.PI * 2;
-
                 camRot.x += diff / config.aimbot.smooth;
 
-                // Silent Aim (Y axis)
-                const targetY = target.position.y + 1.5; // Head height
+                const targetY = target.position.y + 1.5;
                 const pitch = Math.atan2(targetY - camPos.y, closestDist);
                 window.game.camera.rotation.y += (pitch - window.game.camera.rotation.y) / config.aimbot.smooth;
 
-                // Auto Fire
                 if (config.aimbot.autoFire) {
                     if (!isFiring) {
                         if (window.game.actions && window.game.actions.fire) {
@@ -405,13 +403,11 @@ javascript:(function(){
         }
     };
 
-    // --- Visuals (FOV Circle) ---
-    let fovCanvas = null;
+    // --- 7. Visuals (FOV) ---
     const hookRender = () => {
         if (window.__aimbotRendered) return;
         window.__aimbotRendered = true;
 
-        // Create Canvas if not exists
         if (!document.getElementById('veks-fov-canvas')) {
             fovCanvas = document.createElement('canvas');
             fovCanvas.id = 'veks-fov-canvas';
@@ -435,7 +431,6 @@ javascript:(function(){
                 canvas.width = window.innerWidth;
                 canvas.height = window.innerHeight;
 
-                // Project 3D target to 2D screen
                 const screenPos = projectToScreen(target.position);
                 if (screenPos) {
                     ctx.beginPath();
@@ -444,7 +439,6 @@ javascript:(function(){
                     ctx.lineWidth = 2;
                     ctx.stroke();
                     
-                    // Crosshair
                     ctx.beginPath();
                     ctx.moveTo(screenPos.x - 5, screenPos.y);
                     ctx.lineTo(screenPos.x + 5, screenPos.y);
@@ -461,55 +455,52 @@ javascript:(function(){
         });
     };
 
-    // --- Helper: Project 3D to 2D ---
+    // --- Helper ---
     const projectToScreen = (pos) => {
         if (!window.game || !window.game.camera) return null;
-        
         const camPos = window.game.camera.position;
         const camRot = window.game.camera.rotation;
-        
-        // Simple orthographic-ish projection for veck.io
         const dx = pos.x - camPos.x;
         const dz = pos.z - camPos.z;
         const dy = pos.y - camPos.y;
-
-        // Rotation matrices
         const cosX = Math.cos(camRot.x);
         const sinX = Math.sin(camRot.x);
         const cosY = Math.cos(camRot.y);
         const sinY = Math.sin(camRot.y);
-
-        // Rotate around Y axis (Yaw)
         const rx = dx * cosX - dz * sinX;
         const rz = dx * sinX + dz * cosX;
-
-        // Rotate around X axis (Pitch)
         const ry = dy * cosY - rz * sinY;
         const rzFinal = dy * sinY + rz * cosY;
-
-        // FOV scaling (approximate)
-        const fov = 60; // Default FOV in degrees
+        const fov = 60; 
         const fovRad = fov * (Math.PI / 180);
-        
-        if (rzFinal <= 0) return null; // Behind camera
-
+        if (rzFinal <= 0) return null; 
         const screenX = window.innerWidth / 2 + (rx / rzFinal) * (window.innerWidth / (2 * Math.tan(fovRad / 2)));
         const screenY = window.innerHeight / 2 - (ry / rzFinal) * (window.innerHeight / (2 * Math.tan(fovRad / 2)));
-
         return { x: screenX, y: screenY };
     };
 
-    // --- Hooking ---
+    // --- 8. Initialization ---
+    const init = () => {
+        createMenu();
+        
+        // Wait for game
+        if (window.game) {
+            hookGameLoop();
+            hookRender();
+        } else {
+            const checkGame = setInterval(() => {
+                if (window.game) {
+                    clearInterval(checkGame);
+                    hookGameLoop();
+                    hookRender();
+                }
+            }, 100);
+        }
+    };
+
     const hookGameLoop = () => {
         if (window.__aimbotHooked) return;
-        
-        if (!window.game) {
-            setTimeout(hookGameLoop, 100);
-            return;
-        }
-
         window.__aimbotHooked = true;
-
         const originalRAF = window.requestAnimationFrame;
         window.requestAnimationFrame = function(callback) {
             aimbotCore.update();
@@ -517,7 +508,6 @@ javascript:(function(){
         };
     };
 
-    // Run
     init();
 
 })();
