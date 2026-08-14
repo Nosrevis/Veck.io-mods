@@ -6,14 +6,8 @@ javascript:(function(){
             fov: 180,
             smooth: 5,
             maxDistance: 800,
-            silent: true,
             showFov: true
         },
-        visuals: {
-            showHealth: false,
-            showName: true,
-            showDistance: false
-        }
     };
 
     // --- Global State ---
@@ -21,6 +15,7 @@ javascript:(function(){
     let menuDiv = null;
     let modsBtn = null;
     let isMenuOpen = false;
+    let settingsDiv = null; // The new external settings panel
     let contentDiv = null;
     let fovCanvas = null;
     let ctx = null;
@@ -41,7 +36,7 @@ javascript:(function(){
             padding: 12px 24px;
             background: #007aff;
             color: white;
-            border: none;
+            border: 2px solid transparent;
             cursor: pointer;
             border-radius: 20px;
             font-size: 16px;
@@ -53,6 +48,7 @@ javascript:(function(){
         modsBtn.onclick = () => {
             isMenuOpen = !isMenuOpen;
             menuDiv.style.display = isMenuOpen ? 'block' : 'none';
+            settingsDiv.style.display = isMenuOpen ? 'block' : 'none';
         };
         document.body.appendChild(modsBtn);
 
@@ -76,6 +72,7 @@ javascript:(function(){
             overflow: hidden;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             border: 1px solid #333;
+            transition: transform 0.2s ease;
         `;
 
         // Header
@@ -123,18 +120,55 @@ javascript:(function(){
         closeBtn.onclick = () => {
             isMenuOpen = false;
             menuDiv.style.display = 'none';
+            settingsDiv.style.display = 'none';
         };
         footer.appendChild(closeBtn);
         menuDiv.appendChild(footer);
 
+        // --- External Settings Panel (To the right) ---
+        settingsDiv = document.createElement('div');
+        settingsDiv.style.cssText = `
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            background: #1c1c1e;
+            color: white;
+            padding: 20px;
+            border-radius: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            z-index: 9998;
+            width: 250px;
+            display: none;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid #333;
+        `;
+        const settingsHeader = document.createElement('h3');
+        settingsHeader.innerText = "Settings";
+        settingsHeader.style.marginTop = '0';
+        settingsDiv.appendChild(settingsHeader);
+        
+        const settingsContent = document.createElement('div');
+        settingsContent.id = 'settings-content';
+        settingsContent.style.display = 'flex';
+        settingsContent.style.flexDirection = 'column';
+        settingsContent.style.gap = '10px';
+        settingsDiv.appendChild(settingsContent);
+
         document.body.appendChild(menuDiv);
+        document.body.appendChild(settingsDiv);
+        
         makeDraggable(menuDiv, header);
+        makeDraggable(settingsDiv, settingsHeader);
+
         renderHome();
     };
 
     // --- View Rendering ---
     const renderHome = () => {
         currentSection = 'home';
+        settingsDiv.style.display = 'none';
+        menuDiv.style.transform = 'translate(-50%, -50%)'; // Center menu
         contentDiv.innerHTML = `
             <div style="display: flex; flex-direction: column; gap: 15px;">
                 <button onclick="window._vSwitch('fun')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: 600;">
@@ -176,17 +210,10 @@ javascript:(function(){
                 <h3 style="margin: 0;">Advantages</h3>
             </div>
             
-            <!-- Main Aimbot Toggle -->
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #2c2c2e; border-radius: 12px; margin-bottom: 15px;">
-                <span style="font-weight: 600;">🎯 Aimbot</span>
-                <label style="position: relative; display: inline-block; width: 50px; height: 26px;">
-                    <input type="checkbox" id="aimbotMainToggle" ${config.aimbot.enabled ? 'checked' : ''} onchange="window._toggleAimbot(this.checked)">
-                    <span style="
-                        position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-                        background-color: #ccc; transition: .4s; border-radius: 34px;
-                    "></span>
-                </label>
-            </div>
+            <!-- Main Aimbot Button (No more toggle switch) -->
+            <button id="aimbotMainBtn" onclick="window._toggleAimbotBtn()" style="padding: 20px; background: #3a3a3c; color: white; border: 2px solid #555; border-radius: 12px; font-size: 18px; font-weight: 600; margin-bottom: 15px;">
+                🎯 Aimbot
+            </button>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <button onclick="window._vSwitch('aimbot')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">
@@ -220,14 +247,13 @@ javascript:(function(){
     };
 
     const renderAimbotSettings = () => {
-        currentSection = 'aimbot';
-        contentDiv.innerHTML = `
-            <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                <button onclick="window._vSwitch('advantages')" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
-                <h3 style="margin: 0;">Aimbot Settings</h3>
-            </div>
-            
-            <div style="margin-bottom: 15px;">
+        // Slide menu to left
+        menuDiv.style.transform = 'translate(calc(-50% - 140px), -50%)';
+        settingsDiv.style.display = 'block';
+
+        const container = document.getElementById('settings-content');
+        container.innerHTML = `
+            <div style="margin-bottom: 10px;">
                 <label style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                     <span>Smoothness</span>
                     <span id="smoothVal">${config.aimbot.smooth}</span>
@@ -236,33 +262,35 @@ javascript:(function(){
                 <small style="color: #888;">Higher = Smoother</small>
             </div>
 
-            <div style="margin-bottom: 15px;">
-                <label style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>Show FOV Circle</span>
-                    <input type="checkbox" id="showFov" ${config.aimbot.showFov ? 'checked' : ''} onchange="window._toggleShowFov(this.checked)">
-                </label>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                <label>Show FOV Circle</label>
+                <input type="checkbox" id="showFov" ${config.aimbot.showFov ? 'checked' : ''} onchange="window._toggleShowFov(this.checked)">
             </div>
 
-            <div style="margin-bottom: 15px;">
+            <div style="margin-bottom: 10px;">
                 <label style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                     <span>FOV Radius</span>
                     <span id="fovVal">${config.aimbot.fov}</span>
                 </label>
                 <input type="range" id="fovRange" min="1" max="360" value="${config.aimbot.fov}" style="width: 100%;">
             </div>
+            
+            <button onclick="window._vSwitch('advantages')" style="padding: 10px; background: #ff3b30; color: white; border: none; border-radius: 8px; margin-top: 10px;">
+                Back to Menu
+            </button>
         `;
 
-        const smoothRange = contentDiv.querySelector('#smoothRange');
-        const fovRange = contentDiv.querySelector('#fovRange');
-        const showFov = contentDiv.querySelector('#showFov');
+        const smoothRange = container.querySelector('#smoothRange');
+        const fovRange = container.querySelector('#fovRange');
+        const showFov = container.querySelector('#showFov');
 
         smoothRange.oninput = (e) => {
             config.aimbot.smooth = parseInt(e.target.value);
-            contentDiv.querySelector('#smoothVal').innerText = e.target.value;
+            container.querySelector('#smoothVal').innerText = e.target.value;
         };
         fovRange.oninput = (e) => {
             config.aimbot.fov = parseInt(e.target.value);
-            contentDiv.querySelector('#fovVal').innerText = e.target.value;
+            container.querySelector('#fovVal').innerText = e.target.value;
         };
     };
 
@@ -273,12 +301,30 @@ javascript:(function(){
         else if (section === 'visual') renderVisuals();
         else if (section === 'aimbot') renderAimbotSettings();
         else if (section === 'home') renderHome();
+        
+        updateAimbotButton();
     };
 
-    // Global toggles
-    window._toggleAimbot = (checked) => {
-        config.aimbot.enabled = checked;
-        target = null; // Reset target when disabled
+    // --- Logic for Aimbot Button ---
+    window._toggleAimbotBtn = () => {
+        config.aimbot.enabled = !config.aimbot.enabled;
+        target = null; 
+        updateAimbotButton();
+    };
+
+    const updateAimbotButton = () => {
+        const btn = document.getElementById('aimbotMainBtn');
+        if (btn) {
+            if (config.aimbot.enabled) {
+                btn.style.borderColor = '#32d74b'; // Green outline
+                btn.style.boxShadow = '0 0 10px rgba(50, 215, 75, 0.5)';
+                btn.innerText = "🎯 Aimbot: ON";
+            } else {
+                btn.style.borderColor = '#555'; // Grey outline
+                btn.style.boxShadow = 'none';
+                btn.innerText = "🎯 Aimbot";
+            }
+        }
     };
 
     window._toggleShowFov = (checked) => {
@@ -316,7 +362,7 @@ javascript:(function(){
             el.style.transition = 'all 0.1s ease';
         };
 
-        const h = handle || menuDiv.querySelector('div[style*="padding: 15px"]');
+        const h = handle || el.querySelector('div[style*="padding: 15px"]');
         if(h) {
             h.addEventListener('mousedown', onStart);
             h.addEventListener('touchstart', onStart, { passive: false });
@@ -328,7 +374,7 @@ javascript:(function(){
         window.addEventListener('touchend', onEnd);
     };
 
-    // --- 6. Aimbot Logic (Fixed) ---
+    // --- Aimbot Logic ---
     const aimbotCore = {
         update: () => {
             if (!window.game || !window.game.camera) return;
@@ -387,7 +433,7 @@ javascript:(function(){
         }
     };
 
-    // --- 7. Visuals (FOV) ---
+    // --- Visuals (FOV) ---
     const hookRender = () => {
         if (window.__aimbotRendered) return;
         window.__aimbotRendered = true;
@@ -463,7 +509,7 @@ javascript:(function(){
         return { x: screenX, y: screenY };
     };
 
-    // --- 8. Initialization ---
+    // --- Initialization ---
     const init = () => {
         createMenu();
         
