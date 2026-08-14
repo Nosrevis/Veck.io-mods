@@ -4,7 +4,7 @@ javascript:(function(){
         aimbot: {
             enabled: false,
             fov: 180,
-            smooth: 5,
+            smooth: 6,
             maxDistance: 800,
             showFov: true
         },
@@ -20,7 +20,9 @@ javascript:(function(){
     let fovCanvas = null;
     let ctx = null;
     let currentSection = 'home';
-    
+    let lastCameraX = 0;
+    let lastCameraY = 0;
+
     // --- Menu UI ---
     const createMenu = () => {
         if (menuDiv) return;
@@ -375,26 +377,27 @@ javascript:(function(){
         window.addEventListener('touchend', onEnd);
     };
 
-    // --- Aimbot Logic ---
+    // --- Aimbot Logic (Robust DOM Version) ---
     const aimbotCore = {
         update: () => {
-            // Use DOM scanning for Veck.io
-            const camEl = document.querySelector('[class*="camera"]') || document.querySelector('[class*="Camera"]');
-            if (!camEl) return;
-
             if (!config.aimbot.enabled) {
                 target = null;
                 return;
             }
 
+            // 1. Find the Camera
+            const camEl = document.querySelector('[class*="camera"]');
+            if (!camEl) return;
+
+            // 2. Find all Players
             const players = Array.from(document.querySelectorAll('[class*="player"]'));
             if (!players.length) return;
 
-            // Get camera transform
+            // 3. Get Camera Transform
             const camTransform = camEl.getAttribute('transform');
             const camMatch = camTransform.match(/-?\d+/g);
             if (!camMatch) return;
-            
+
             const camX = parseFloat(camMatch[0]);
             const camY = parseFloat(camMatch[1]);
             const camZ = parseFloat(camMatch[2]);
