@@ -1,39 +1,32 @@
 javascript:(function(){
-    // --- 1. Configuration ---
+    // --- Configuration ---
     const config = {
         aimbot: {
-            enabled: true,
+            enabled: false,
             fov: 180,
-            smooth: 10, 
-            maxDistance: 1000,
-            silent: true, 
-            autoFire: false,
-            lockThroughWalls: false, 
-            showFov: false 
+            smooth: 5,
+            maxDistance: 800,
+            silent: true,
+            showFov: true
         },
         visuals: {
             showHealth: false,
             showName: true,
             showDistance: false
-        },
-        fun: {
-            speed: false,
-            fly: false
         }
     };
 
-    // --- 2. State & Globals ---
+    // --- Global State ---
     let target = null;
-    let isFiring = false;
-    let fireTimer = 0;
     let menuDiv = null;
     let modsBtn = null;
     let isMenuOpen = false;
-    let contentDiv = null; 
+    let contentDiv = null;
     let fovCanvas = null;
     let ctx = null;
+    let currentSection = 'home';
 
-    // --- 3. Menu UI ---
+    // --- Menu UI ---
     const createMenu = () => {
         if (menuDiv) return;
 
@@ -139,7 +132,7 @@ javascript:(function(){
         renderHome();
     };
 
-    // --- 4. View Rendering ---
+    // --- View Rendering ---
     const renderHome = () => {
         currentSection = 'home';
         contentDiv.innerHTML = `
@@ -157,8 +150,6 @@ javascript:(function(){
         `;
     };
 
-    let currentSection = 'home';
-    
     const renderFun = () => {
         currentSection = 'fun';
         contentDiv.innerHTML = `
@@ -184,9 +175,22 @@ javascript:(function(){
                 <button onclick="window._vSwitch('home')" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
                 <h3 style="margin: 0;">Advantages</h3>
             </div>
+            
+            <!-- Main Aimbot Toggle -->
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #2c2c2e; border-radius: 12px; margin-bottom: 15px;">
+                <span style="font-weight: 600;">🎯 Aimbot</span>
+                <label style="position: relative; display: inline-block; width: 50px; height: 26px;">
+                    <input type="checkbox" id="aimbotMainToggle" ${config.aimbot.enabled ? 'checked' : ''} onchange="window._toggleAimbot(this.checked)">
+                    <span style="
+                        position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+                        background-color: #ccc; transition: .4s; border-radius: 34px;
+                    "></span>
+                </label>
+            </div>
+
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                 <button onclick="window._vSwitch('aimbot')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">
-                    🎯 Aimbot
+                    ⚙️ Settings
                 </button>
                 <button onclick="alert('Regen mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">🛡️ Regen</button>
                 <button onclick="alert('Speed mod coming soon')" style="padding: 20px; background: #3a3a3c; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600;">⚡ Speed</button>
@@ -215,17 +219,17 @@ javascript:(function(){
         `;
     };
 
-    const renderAimbot = () => {
+    const renderAimbotSettings = () => {
         currentSection = 'aimbot';
         contentDiv.innerHTML = `
             <div style="display: flex; align-items: center; margin-bottom: 15px;">
                 <button onclick="window._vSwitch('advantages')" style="background: none; border: none; color: #007aff; font-size: 16px; padding: 0; margin-right: 10px;">← Back</button>
-                <h3 style="margin: 0;">Aimbot</h3>
+                <h3 style="margin: 0;">Aimbot Settings</h3>
             </div>
             
             <div style="margin-bottom: 15px;">
                 <label style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                    <span>Intensity</span>
+                    <span>Smoothness</span>
                     <span id="smoothVal">${config.aimbot.smooth}</span>
                 </label>
                 <input type="range" id="smoothRange" min="1" max="20" value="${config.aimbot.smooth}" style="width: 100%;">
@@ -234,15 +238,8 @@ javascript:(function(){
 
             <div style="margin-bottom: 15px;">
                 <label style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>Lock Through Walls</span>
-                    <input type="checkbox" id="lockWalls" ${config.aimbot.lockThroughWalls ? 'checked' : ''}>
-                </label>
-            </div>
-
-            <div style="margin-bottom: 15px;">
-                <label style="display: flex; justify-content: space-between; align-items: center;">
                     <span>Show FOV Circle</span>
-                    <input type="checkbox" id="showFov" ${config.aimbot.showFov ? 'checked' : ''}>
+                    <input type="checkbox" id="showFov" ${config.aimbot.showFov ? 'checked' : ''} onchange="window._toggleShowFov(this.checked)">
                 </label>
             </div>
 
@@ -257,7 +254,6 @@ javascript:(function(){
 
         const smoothRange = contentDiv.querySelector('#smoothRange');
         const fovRange = contentDiv.querySelector('#fovRange');
-        const lockWalls = contentDiv.querySelector('#lockWalls');
         const showFov = contentDiv.querySelector('#showFov');
 
         smoothRange.oninput = (e) => {
@@ -268,12 +264,6 @@ javascript:(function(){
             config.aimbot.fov = parseInt(e.target.value);
             contentDiv.querySelector('#fovVal').innerText = e.target.value;
         };
-        lockWalls.onchange = (e) => {
-            config.aimbot.lockThroughWalls = e.target.checked;
-        };
-        showFov.onchange = (e) => {
-            config.aimbot.showFov = e.target.checked;
-        };
     };
 
     // Global switcher
@@ -281,11 +271,21 @@ javascript:(function(){
         if (section === 'fun') renderFun();
         else if (section === 'advantages') renderAdvantages();
         else if (section === 'visual') renderVisuals();
-        else if (section === 'aimbot') renderAimbot();
+        else if (section === 'aimbot') renderAimbotSettings();
         else if (section === 'home') renderHome();
     };
 
-    // --- 5. Drag Logic ---
+    // Global toggles
+    window._toggleAimbot = (checked) => {
+        config.aimbot.enabled = checked;
+        target = null; // Reset target when disabled
+    };
+
+    window._toggleShowFov = (checked) => {
+        config.aimbot.showFov = checked;
+    };
+
+    // --- Drag Logic ---
     const makeDraggable = (el, handle) => {
         let isDragging = false;
         let startX, startY, initialLeft, initialTop;
@@ -328,10 +328,12 @@ javascript:(function(){
         window.addEventListener('touchend', onEnd);
     };
 
-    // --- 6. Aimbot Logic ---
+    // --- 6. Aimbot Logic (Fixed) ---
     const aimbotCore = {
         update: () => {
             if (!window.game || !window.game.camera) return;
+            
+            // If disabled, just return
             if (!config.aimbot.enabled) {
                 target = null;
                 return;
@@ -358,17 +360,11 @@ javascript:(function(){
                 let angleDiff = Math.abs(angle - camRot.x);
                 if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
 
-                if (config.aimbot.lockThroughWalls) {
-                     if (dist < closestDist) {
+                // Simple distance check for closest target in FOV
+                if (angleDiff < (config.aimbot.fov / 2) * (Math.PI / 180)) {
+                    if (dist < closestDist) {
                         closestDist = dist;
                         closestPlayer = p;
-                    }
-                } else {
-                    if (angleDiff < (config.aimbot.fov / 2) * (Math.PI / 180)) {
-                        if (dist < closestDist) {
-                            closestDist = dist;
-                            closestPlayer = p;
-                        }
                     }
                 }
             });
@@ -380,25 +376,13 @@ javascript:(function(){
                 let diff = targetAngle - camRot.x;
                 while (diff <= -Math.PI) diff += Math.PI * 2;
                 while (diff > Math.PI) diff -= Math.PI * 2;
+                
+                // Apply smoothing
                 camRot.x += diff / config.aimbot.smooth;
 
                 const targetY = target.position.y + 1.5;
                 const pitch = Math.atan2(targetY - camPos.y, closestDist);
                 window.game.camera.rotation.y += (pitch - window.game.camera.rotation.y) / config.aimbot.smooth;
-
-                if (config.aimbot.autoFire) {
-                    if (!isFiring) {
-                        if (window.game.actions && window.game.actions.fire) {
-                            window.game.actions.fire();
-                        }
-                        isFiring = true;
-                        fireTimer = config.aimbot.autoFireDelay;
-                    }
-                } else {
-                    isFiring = false;
-                }
-            } else {
-                isFiring = false;
             }
         }
     };
