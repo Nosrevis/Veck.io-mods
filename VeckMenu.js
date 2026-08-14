@@ -1,317 +1,255 @@
-  const aimbotCore = {
-    getDistanceToEnemy(target) {
-      if (target.position) {
-        const dx = target.position.x - (window.game?.camera?.position?.x || 0);
-        const dy = target.position.y - (window.game?.camera?.position?.y || 0);
-        const dz = target.position.z - (window.game?.camera?.position?.z || 0);
-        return Math.sqrt(dx*dx + dy*dy + dz*dz);
-      }
-      if (target.x !== undefined && target.y !== undefined) {
-        const playerX = window.game?.localPlayer?.x || window.innerWidth / 2;
-        const playerY = window.game?.localPlayer?.y || window.innerHeight / 2;
-        const dx = target.x - playerX;
-        const dy = target.y - playerY;
-        return Math.sqrt(dx*dx + dy*dy);
-      }
-      const pos = this.getTargetPos(target);
-      if (!pos) return Infinity;
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      return Math.sqrt(Math.pow(pos.x - cx, 2) + Math.pow(pos.y - cy, 2));
-    },
-    
-    getTargetPos(target, headshot = false) {
-      // Try to get head position first for headshots
-      if (headshot && target.headPosition) {
-        if (target.headPosition.clone) {
-          const pos = target.headPosition.clone();
-          if (window.game?.camera) {
-            pos.project(window.game.camera);
-            return { x: (pos.x + 1) * window.innerWidth / 2, y: (-pos.y + 1) * window.innerHeight / 2 };
-          }
-          return { x: target.headPosition.x, y: target.headPosition.y };
+/* VeckMenu - Combined Script */
+(function() {
+    // --- Configuration ---
+    const config = {
+        aimbot: {
+            enabled: true,
+            fov: 180,
+            smooth: 5,
+            maxDistance: 800,
+            silent: false,
+            key: 'Space', // Toggle key
+            autoFire: false,
+            autoFireDelay: 150
         }
-        return { x: target.headPosition.x, y: target.headPosition.y };
-      }
-      
-      // Try head bone for 3D games
-      if (headshot && target.bones) {
-        const head = target.bones.find(b => b.name === 'head' || b.name === 'HEAD');
-        if (head && window.game?.camera) {
-          const pos = head.position.clone ? head.position.clone() : { ...head.position };
-          pos.project(window.game.camera);
-          return { x: (pos.x + 1) * window.innerWidth / 2, y: (-pos.y + 1) * window.innerHeight / 2 };
-        }
-      }
-      
-      // Offset for headshot (aim higher)
-      if (target.getBoundingClientRect) {
-        const rect = target.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        if (headshot) {
-          // Aim at top 20% of hitbox (head area)
-          return { x: centerX, y: rect.top + rect.height * 0.2 };
-        }
-        return { x: centerX, y: centerY };
-      }
-      
-      if (target.position && window.game?.camera) {
-        const pos = target.position.clone ? target.position.clone() : target.position;
-        pos.project(window.game.camera);
-        const screenX = (pos.x + 1) * window.innerWidth / 2;
-        const screenY = (-pos.y + 1) * window.innerHeight / 2;
-        if (headshot) {
-          // Move up for headshot
-          return { x: screenX, y: screenY - 30 };
-        }
-        return { x: screenX, y: screenY };
-      }
-      
-      if (target.x !== undefined && target.y !== undefined) {
-        if (headshot) {
-          return { x: target.x, y: target.y - 20 };
-        }
-        return { x: target.x, y: target.y };
-      }
-      
-      return null;
-    },
-    
-    isOnScreen(pos) {
-      if (!pos) return false;
-      if (state.lockThroughWalls) return true; // Skip visibility check
-      return pos.x > -100 && pos.x < window.innerWidth + 100 && 
-             pos.y > -100 && pos.y < window.innerHeight + 100;
-    },
-    
-    isInFOV(target) {
-      if (state.aimbotFOV >= 360) return true;
-      const pos = this.getTargetPos(target);
-      if (!pos) return false;
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      const angle = Math.atan2(pos.y - cy, pos.x - cx) * 180 / Math.PI;
-      const normalizedAngle = ((angle % 360) + 360) % 360;
-      const angleDiff = Math.abs(normalizedAngle - 0);
-      return angleDiff <= state.aimbotFOV / 2;
-    },
-    
-    findClosestEnemy() {
-      const targets = this.findTargets();
-      if (targets.length === 0) return null;
-      let closest = null;
-      let closestDist = Infinity;
-      
-      for (const target of targets) {
-        // Skip visibility check if lock through walls is on
-        if (!state.lockThroughWalls) {
-          const pos = this.getTargetPos(target);
-          if (!this.isOnScreen(pos)) continue;
-        }
-        
-        if (!this.isInFOV(target)) continue;
-        
-        const dist = this.getDistanceToEnemy(target);
-        if (dist < closestDist) {
-          closestDist = dist;
-          closest = { element: target, dist };
-        }
-      }
-      
-      // Get fresh position for the closest target (with headshot)
-      if (closest) {
-        closest.pos = this.getTargetPos(closest.element, true); // true = headshot
-      }
-      
-      return closest;
-    },
-    
-    findTargets() {
-      const targets = [];
-      
-      // Scan larger area if lock through walls is on
-      const scanAll = state.lockThroughWalls;
-      
-      if (window.game) {
-        if (window.game.players) {
-          Object.values(window.game.players).forEach(p => {
-            if (p && !p.isLocal && (p.active !== false || scanAll) && (p.health > 0 || scanAll)) {
-              if (!state.teamCheck || p.team !== window.game.localPlayer?.team) {
-                targets.push(p);
-              }
-            }
-          });
-        }
-        if (window.game.enemies) {
-          Object.values(window.game.enemies).forEach(e => {
-            if (e && (e.active !== false || scanAll)) targets.push(e);
-          });
-        }
-        if (window.game.entities) {
-          Object.values(window.game.entities).forEach(e => {
-            if (e && e.type === 'enemy' && (e.active !== false || scanAll)) targets.push(e);
-          });
-        }
-      }
-      
-      if (targets.length === 0) {
-        const selectors = ['.player:not(.local)', '.enemy', '[class*="enemy"]', 
-          '[class*="opponent"]', '[class*="target"]', '[data-team]:not([data-team="own"])'];
-        
-        for (const selector of selectors) {
-          const elements = document.querySelectorAll(selector);
-          elements.forEach(el => {
-            const rect = el.getBoundingClientRect();
-            // More lenient size check if locking through walls
-            const minSize = scanAll ? 1 : 5;
-            if (rect.width > minSize && rect.height > minSize) {
-              if (scanAll) {
-                targets.push(el);
-              } else {
-                const style = window.getComputedStyle(el);
-                if (style.display !== 'none' && style.visibility !== 'hidden') {
-                  targets.push(el);
-                }
-              }
-            }
-          });
-        }
-      }
-      
-      return targets;
-    },
-    
-    lockOnto(targetData) {
-      if (!targetData || !targetData.pos) return;
-      
-      const { pos } = targetData;
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      
-      const dx = pos.x - cx;
-      const dy = pos.y - cy;
-      
-      // INSANE MODE: 100% = INSTANT SNAP, no smoothing
-      const strength = state.aimbotStrength;
-      
-      let moveX, moveY;
-      
-      if (strength >= 100) {
-        // INSTANT SNAP - teleport crosshair to head
-        moveX = dx;
-        moveY = dy;
-      } else if (strength >= 80) {
-        // FAST - almost instant
-        const speed = 0.5 + (strength / 200);
-        moveX = dx * speed;
-        moveY = dy * speed;
-      } else {
-        // NORMAL - smoothed
-        const speed = 0.05 + (strength / 200);
-        moveX = dx * speed;
-        moveY = dy * speed;
-      }
-      
-      // Update visual indicator
-      const indicator = document.getElementById('aimbot-target');
-      if (indicator) {
-        indicator.style.display = 'block';
-        indicator.style.left = (pos.x - 8) + 'px';
-        indicator.style.top = (pos.y - 8) + 'px';
-        // Change color based on strength
-        if (strength >= 100) {
-          indicator.style.borderColor = '#ff0000';
-          indicator.style.boxShadow = '0 0 30px #ff0000, 0 0 60px #ff0000';
-        } else if (strength >= 80) {
-          indicator.style.borderColor = '#ff8800';
-          indicator.style.boxShadow = '0 0 20px #ff8800, 0 0 40px #ff8800';
-        } else {
-          indicator.style.borderColor = '#ffd700';
-          indicator.style.boxShadow = '0 0 20px #ffd700, 0 0 40px #ffd700';
-        }
-      }
-      
-      // Apply aim - Try multiple methods to ensure it works
-      
-      // Method 1: Pointer Lock (Mouse Movement)
-      if (document.pointerLockElement) {
-        const canvas = document.pointerLockElement;
-        // Dispatch a synthetic mouse move event
-        const event = new MouseEvent('mousemove', { 
-          movementX: moveX, 
-          movementY: moveY, 
-          bubbles: true 
-        });
-        canvas.dispatchEvent(event);
-        
-        // Also try to update internal camera controls if available
-        if (window.game?.controls) {
-          const sens = strength >= 100 ? 0.001 : 0.002;
-          window.game.controls.yaw -= moveX * sens;
-          window.game.controls.pitch -= moveY * sens;
-        }
-        return;
-      }
-      
-      // Method 2: Direct Camera Rotation (Three.js style)
-      if (window.game?.camera) {
-        const sensitivity = strength >= 100 ? 0.001 : 0.002;
-        // Ensure we don't break the camera rotation structure
-        if (window.game.camera.rotation) {
-          window.game.camera.rotation.y -= moveX * sensitivity;
-          window.game.camera.rotation.x -= moveY * sensitivity;
-        }
-        return;
-      }
-      
-      // Method 3: Direct Canvas Mouse Move (Fallback)
-      const canvas = document.querySelector('canvas');
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const event = new MouseEvent('mousemove', {
-          clientX: rect.left + cx + moveX,
-          clientY: rect.top + cy + moveY,
-          movementX: moveX,
-          movementY: moveY,
-          bubbles: true
-        });
-        canvas.dispatchEvent(event);
-      }
-    },
-    
-    update() {
-      if (!state.aimbot) {
-        const indicator = document.getElementById('aimbot-target');
-        if (indicator) {
-          indicator.style.display = 'none';
-          indicator.style.borderColor = '#ffd700';
-          indicator.style.boxShadow = '0 0 20px #ffd700, 0 0 40px #ffd700';
-        }
-        return;
-      }
-      
-      const target = this.findClosestEnemy();
-      
-      if (target) {
-        state.target = target;
-        this.lockOnto(target);
-      } else {
-        state.target = null;
-        const indicator = document.getElementById('aimbot-target');
-        if (indicator) indicator.style.display = 'none';
-      }
-    }
-  };
-
-  const hookGameLoop = () => {
-    if (window.__aimbotHooked) return;
-    window.__aimbotHooked = true;
-    
-    // Use only requestAnimationFrame for smoother updates
-    const originalRAF = window.requestAnimationFrame;
-    window.requestAnimationFrame = function(callback) {
-      aimbotCore.update();
-      return originalRAF.call(this, callback);
     };
-  };
+
+    // --- State ---
+    let target = null;
+    let isFiring = false;
+    let fireTimer = 0;
+    let keyHeld = false;
+
+    // --- DOM Elements ---
+    let menuDiv = null;
+    let fovInput = null;
+    let smoothInput = null;
+    let distInput = null;
+    let silentCheckbox = null;
+    let autoFireCheckbox = null;
+    let toggleBtn = null;
+
+    // --- Initialization ---
+    const init = () => {
+        createMenu();
+        setupInput();
+        hookGameLoop();
+    };
+
+    // --- Menu UI ---
+    const createMenu = () => {
+        if (menuDiv) return;
+
+        menuDiv = document.createElement('div');
+        menuDiv.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            z-index: 9999;
+            min-width: 200px;
+            border: 1px solid #444;
+        `;
+
+        menuDiv.innerHTML = `
+            <h3 style="margin: 0 0 10px; font-size: 16px;">Veck Aimbot</h3>
+            <label>FOV: <input type="range" id="fovRange" min="1" max="360" value="${config.aimbot.fov}"> <span id="fovVal">${config.aimbot.fov}</span></label><br>
+            <label>Smooth: <input type="range" id="smoothRange" min="1" max="20" value="${config.aimbot.smooth}"> <span id="smoothVal">${config.aimbot.smooth}</span></label><br>
+            <label>Max Dist: <input type="range" id="distRange" min="100" max="2000" value="${config.aimbot.maxDistance}"> <span id="distVal">${config.aimbot.maxDistance}</span></label><br>
+            <label><input type="checkbox" id="silentCheck"> Silent Aim</label><br>
+            <label><input type="checkbox" id="autoFireCheck"> Auto Fire</label><br>
+            <div style="margin-top: 10px; font-size: 12px; color: #aaa;">
+                Key: Space (Toggle)<br>
+                Status: <span id="statusText">Off</span>
+            </div>
+        `;
+
+        document.body.appendChild(menuDiv);
+
+        // Bind Inputs
+        fovInput = menuDiv.querySelector('#fovRange');
+        smoothInput = menuDiv.querySelector('#smoothRange');
+        distInput = menuDiv.querySelector('#distRange');
+        silentCheckbox = menuDiv.querySelector('#silentCheck');
+        autoFireCheckbox = menuDiv.querySelector('#autoFireCheck');
+        const fovVal = menuDiv.querySelector('#fovVal');
+        const smoothVal = menuDiv.querySelector('#smoothVal');
+        const distVal = menuDiv.querySelector('#distVal');
+        const statusText = menuDiv.querySelector('#statusText');
+
+        fovInput.oninput = (e) => { config.aimbot.fov = parseInt(e.target.value); fovVal.innerText = e.target.value; };
+        smoothInput.oninput = (e) => { config.aimbot.smooth = parseInt(e.target.value); smoothVal.innerText = e.target.value; };
+        distInput.oninput = (e) => { config.aimbot.maxDistance = parseInt(e.target.value); distVal.innerText = e.target.value; };
+        silentCheckbox.onchange = (e) => { config.aimbot.silent = e.target.checked; };
+        autoFireCheckbox.onchange = (e) => { config.aimbot.autoFire = e.target.checked; };
+
+        // Toggle Visibility
+        menuDiv.style.display = 'none';
+        toggleBtn = document.createElement('button');
+        toggleBtn.innerText = "VeckMenu";
+        toggleBtn.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            z-index: 10000;
+            padding: 10px 20px;
+            background: #333;
+            color: white;
+            border: 1px solid #666;
+            cursor: pointer;
+            border-radius: 4px;
+        `;
+        toggleBtn.onclick = () => {
+            menuDiv.style.display = menuDiv.style.display === 'none' ? 'block' : 'none';
+        };
+        document.body.appendChild(toggleBtn);
+    };
+
+    // --- Input Handling ---
+    const setupInput = () => {
+        document.addEventListener('keydown', (e) => {
+            if (e.code === config.aimbot.key) {
+                keyHeld = true;
+                // Toggle status
+                config.aimbot.enabled = !config.aimbot.enabled;
+                const statusText = document.querySelector('#statusText');
+                if(statusText) statusText.innerText = config.aimbot.enabled ? "On" : "Off";
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === config.aimbot.key) {
+                keyHeld = false;
+            }
+        });
+    };
+
+    // --- Aimbot Logic ---
+    const aimbotCore = {
+        update: () => {
+            if (!window.game || !window.game.camera) return;
+            if (!config.aimbot.enabled) {
+                target = null;
+                return;
+            }
+
+            // Find Target
+            const players = window.game.entities.players;
+            if (!players) return;
+
+            let closestDist = Infinity;
+            let closestPlayer = null;
+
+            // Get Camera Position
+            const camPos = window.game.camera.position;
+
+            players.forEach(p => {
+                if (!p || !p.visible) return;
+                
+                // Simple distance check
+                const dist = Math.sqrt(
+                    Math.pow(p.position.x - camPos.x, 2) + 
+                    Math.pow(p.position.z - camPos.z, 2)
+                );
+
+                if (dist > config.aimbot.maxDistance) return;
+
+                // Calculate Angle to Player
+                const dx = p.position.x - camPos.x;
+                const dy = p.position.y - camPos.y; // Approximate height diff
+                const dz = p.position.z - camPos.z;
+
+                // Project into screen space (simplified)
+                const angle = Math.atan2(dx, dz);
+                const cameraAngle = Math.atan2(window.game.camera.rotation.x, window.game.camera.rotation.z); // Simplified rotation check
+                
+                // Basic FOV check (simplified for this engine)
+                // We check if the player is roughly in front of the camera
+                // For a robust solution, you'd project 3D to 2D, but this is a quick fix
+                const distZ = Math.cos(Math.atan2(dx, dz) - window.game.camera.rotation.x); // Approx
+                
+                // Better FOV check using vector math
+                const camDir = window.game.camera.rotation; // Assuming rotation.x is yaw
+                const playerAngle = Math.atan2(dx, dz);
+                let angleDiff = Math.abs(playerAngle - camDir.x);
+                if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+
+                if (angleDiff < (config.aimbot.fov / 2) * (Math.PI / 180)) {
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closestPlayer = p;
+                    }
+                }
+            });
+
+            target = closestPlayer;
+
+            // Apply Aim
+            if (target) {
+                // Smoothly rotate camera to target
+                const camRot = window.game.camera.rotation;
+                const targetAngle = Math.atan2(target.position.x - camPos.x, target.position.z - camPos.z);
+                
+                // Normalize angles
+                let diff = targetAngle - camRot.x;
+                while (diff <= -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+
+                camRot.x += diff / config.aimbot.smooth;
+
+                // Silent Aim: Move player's "hitbox" to camera line of sight
+                if (config.aimbot.silent) {
+                    // Adjust player position so they appear centered? 
+                    // Or adjust camera Y to look at head height
+                    // Simple approach: Move camera Y to target Y
+                    const targetY = target.position.y + 1.5; // Head height
+                    const currentCamY = camPos.y;
+                    const yDiff = targetY - currentCamY;
+                    
+                    // Smooth Y rotation (pitch)
+                    const pitch = Math.atan2(yDiff, closestDist);
+                    window.game.camera.rotation.y += (pitch - window.game.camera.rotation.y) / config.aimbot.smooth;
+                }
+
+                // Auto Fire
+                if (config.aimbot.autoFire) {
+                    if (!isFiring) {
+                        window.game.actions.fire();
+                        isFiring = true;
+                        fireTimer = config.aimbot.autoFireDelay;
+                    }
+                } else {
+                    isFiring = false;
+                }
+            } else {
+                isFiring = false;
+            }
+        }
+    };
+
+    // --- Hooking ---
+    const hookGameLoop = () => {
+        if (window.__aimbotHooked) return;
+        
+        if (!window.game) {
+            setTimeout(hookGameLoop, 100);
+            return;
+        }
+
+        window.__aimbotHooked = true;
+
+        const originalRAF = window.requestAnimationFrame;
+        window.requestAnimationFrame = function(callback) {
+            aimbotCore.update();
+            return originalRAF.call(this, callback);
+        };
+    };
+
+    // Run
+    init();
+
+})();
